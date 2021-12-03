@@ -1,0 +1,68 @@
+#!/bin/bash
+
+ENV="$1"
+shift
+if [ "$ENV" == "" ] ; then
+  echo "Missing ENV"
+  exit 1
+fi
+
+PLAY_DIR="$1"
+shift
+if [ "$PLAY_DIR" == "" ] ; then
+  echo "Missing PLAY_DIR"
+  exit 1
+fi
+
+INV_DIR="$1"
+shift
+if [ "$INV_DIR" == "" ] ; then
+  echo "Missing INV_DIR"
+  exit 1
+fi
+
+VAULT_FILE="$1"
+shift
+if [ "$VAULT_FILE" == "" ] ; then
+  echo "Missing VAULT_FILE"
+  exit 1
+fi
+
+ARGS="$@"
+export ANSIBLE_SSH_PIPELINING=1
+
+# Run any pre-plays
+PLAYS=`find ${PLAY_DIR} -maxdepth 1 -type f -name _exec_pre_\*.yml | sort`
+for play in $PLAYS ; do
+  echo "Running play: $play"
+  echo ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
+  RET=$?
+  if [ $RET -ne 0 ] ; then
+    echo "ansible play failed with return code $RET"
+    exit 1
+  fi
+done
+
+# Run any plays for this environment
+PLAYS=`find ${PLAY_DIR} -maxdepth 1 -type f -name _exec_${ENV}_\*.yml | sort`
+for play in $PLAYS ; do
+  echo "Running play: $play"
+  echo ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
+  RET=$?
+  if [ $RET -ne 0 ] ; then
+    echo "ansible play failed with return code $RET"
+    exit 1
+  fi
+done
+
+# Run any post-plays
+PLAYS=`find ${PLAY_DIR} -maxdepth 1 -type f -name _exec_post_\*.yml | sort`
+for play in $PLAYS ; do
+  echo "Running play: $play"
+  echo ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
+  RET=$?
+  if [ $RET -ne 0 ] ; then
+    echo "ansible play failed with return code $RET"
+    exit 1
+  fi
+done

@@ -1,1 +1,1 @@
-# infmgmt-bin
+# infmgmt-util

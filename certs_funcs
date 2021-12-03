@@ -1,0 +1,156 @@
+#!/bin/bash
+
+function check_ca_cert()
+{
+  # Check that the cert exists
+  if [ \! -f "${CERTS_DIR}/ca.crt" ] ; then
+    echo "CA cert does not exist"
+    return 1
+  fi
+
+  # Validate the CA certificate
+  echo "Verifying CA certificate"
+  openssl verify -CAfile "${CERTS_DIR}/ca.crt" "${CERTS_DIR}/ca.crt"
+  if [ $? -ne 0 ] ; then
+    echo "Could not validate CA cert against itself"
+    return 1
+  fi
+
+  # Check that we have 90 days left on the CA certificate
+  echo "Checking for days remaining on CA cert"
+  openssl x509 -in "${CERTS_DIR}/ca.crt" -checkend `expr 90 \* 24 \* 60 \* 60`
+  if [ $? -ne 0 ] ; then
+    echo "Insufficient days left on the CA"
+    return 1
+  fi
+}
+
+function verify_cert()
+{
+  CERT="$1"
+
+  # Check that the certificate exists
+  if [ \! -f "$CERT" ] ; then
+    echo "Certificate $CERT missing"
+    return 1
+  fi
+
+  # Check that the cert validates against the CA
+  echo "Verifying certificate against CA"
+  openssl verify -CAfile "${CERTS_DIR}/ca.crt" $CERT
+  if [ $? -ne 0 ] ; then
+    echo "Certificate $CERT failed validation"
+    return 1
+  fi
+
+  # Check that we have 30 days left on the certificate
+  echo "Checking for remaining days on certificate"
+  openssl x509 -in "${CERT}" -checkend `expr 30 \* 24 \* 60 \* 60`
+  if [ $? -ne 0 ] ; then
+    echo "Insufficient days left on the certificate"
+    return 1
+  fi
+}
+
+function ensure_cert()
+{
+  CONFIG="$1.config"
+  CERT="$1.crt"
+  KEY="$1.key"
+  CSR="$1.csr"
+
+  echo "Checking for $1"
+
+  # Check that we have a configuration file
+  if [ \! -f "$CONFIG" ] ; then
+    echo "Missing config file $CONFIG"
+    return 1
+  fi
+
+  # Validate the cert. Regenerate as required
+  verify_cert $CERT
+  if [ $? -ne 0 ] ; then
+    echo "Could not validate cert $CERT. Regenerating"
+
+    # Generate request
+    echo "Generating request"
+    openssl req -newkey rsa:2048 -nodes -sha256 -keyout "$KEY" -x509 \
+      -days 730 -out "$CSR" -config $CONFIG
+
+    # Sign request
+    echo "Signing request"
+    openssl x509 -in "$CSR" -CA "${CERTS_DIR}/ca.crt" -CAkey "${CERTS_DIR}/ca.key.output" -CAcreateserial -out "$CERT" \
+      -extensions req_ext -extfile "$CONFIG" -days 730
+
+    # Remove CSR
+    echo "Removing CSR"
+    rm -f "$CSR"
+
+    # Encrypt key
+    echo "Encrypting key"
+    ansible-vault encrypt --vault-password-file ./vault.sh "$KEY"
+
+    # Copy CA cert to target directory
+    echo "Copying CA cert to target dir"
+    cp "${CERTS_DIR}/ca.crt" `dirname $CONFIG`/ca.crt
+  fi
+}
+
+function ensure_ca_cert {
+  # Validate the CA certificate
+  check_ca_cert
+  if [ $? -ne 0 ] ; then
+    # Generate a new certificate
+    echo "Regeneration of CA certificate required"
+    openssl req -newkey rsa:4096 -nodes -sha256 -keyout "${CERTS_DIR}/ca.key" -x509 \
+      -days 1825 -out "${CERTS_DIR}/ca.crt" -config "${CERTS_DIR}/openssl_ca_config"
+    if [ $? -ne 0 ] ; then
+      echo "Failed to generate CA certificate"
+      return 1
+    fi
+
+    # Encrypt certificate key
+    echo "Encrypting CA key"
+    ansible-vault encrypt --vault-password-file ./vault.sh "${CERTS_DIR}/ca.key"
+    if [ $? -ne 0 ] ; then
+      echo "Could not encrypt CA key"
+      return 1
+    fi
+  fi
+}
+
+function decrypt_ca_key {
+  # Generate certificates
+  echo "Decrypting CA key"
+  ansible-vault decrypt --vault-password-file ./vault.sh "${CERTS_DIR}/ca.key" --output "${CERTS_DIR}/ca.key.output"
+  if [ $? -ne 0 ] ; then
+    echo "Failed to decrypt CA key"
+    exit 1
+  fi
+}
+
+function ensure_vars {
+  # Check that VAULT_PASS has been defined
+  if [ "$VAULT_PASS" == "" ] ; then
+    echo "VAULT_PASS has not been defined. exiting"
+    return 1
+  fi
+
+  # Check that CERTS_DIR has been defined
+  if [ "$CERTS_DIR" == "" ] ; then
+    echo "CERTS_DIR has not been defined. exiting"
+    return 1
+  fi
+}
+
+function cert_setup
+{
+  ensure_vars || return 1
+  ensure_ca_cert || return 1
+  decrypt_ca_key || return 1
+}
+
+function cert_cleanup
+{
+  rm -f "${CERTS_DIR}/ca.key.output"
+}
