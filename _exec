@@ -35,7 +35,7 @@ export ANSIBLE_SSH_PIPELINING=1
 PLAYS=`find ${PLAY_DIR} -maxdepth 1 -type f -name _exec_pre_\*.yml | sort`
 for play in $PLAYS ; do
   echo "Running play: $play"
-  echo ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
+  ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
   RET=$?
   if [ $RET -ne 0 ] ; then
     echo "ansible play failed with return code $RET"
@@ -47,7 +47,7 @@ done
 PLAYS=`find ${PLAY_DIR} -maxdepth 1 -type f -name _exec_${ENV}_\*.yml | sort`
 for play in $PLAYS ; do
   echo "Running play: $play"
-  echo ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
+  ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
   RET=$?
   if [ $RET -ne 0 ] ; then
     echo "ansible play failed with return code $RET"
@@ -59,7 +59,7 @@ done
 PLAYS=`find ${PLAY_DIR} -maxdepth 1 -type f -name _exec_post_\*.yml | sort`
 for play in $PLAYS ; do
   echo "Running play: $play"
-  echo ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
+  ansible-playbook -i ${INV_DIR}/shared/inventory.yml -i ${INV_DIR}/${ENV}/inventory.yml --vault-password-file ${VAULT_FILE} ${play} -f 20 $ARGS
   RET=$?
   if [ $RET -ne 0 ] ; then
     echo "ansible play failed with return code $RET"
